@@ -41,15 +41,66 @@
             echo "  - Git $(git --version)"
             echo "  - GitHub CLI $(gh --version | head -1)"
             echo ""
-            echo "🎯 Quick commands:"
-            echo "  deno task generate        - Generate bounty index"
-            echo "  deno task evaluate        - Evaluate bounties"
-            echo "  deno task cache:stats     - View cache statistics"
-            echo "  deno task cache:cleanup   - Clean up old cache"
+            echo "🎯 Main Pipeline Commands:"
+            echo "  deno task generate               - Generate bounty index from 128+ organizations"
+            echo "  deno task generate:full          - Full scan with --full-scan flag"
+            echo "  deno task generate:quick         - Quick scan with 6h max age"
             echo ""
-            echo "📂 XDG directories:"
-            echo "  Cache: ~/.cache/bounty-pipe/"
-            echo "  Work:  ~/.local/share/bounty-pipe/work/"
+            echo "  deno task pre-filter             - Quick scoring assessment of bounties"
+            echo "  deno task pre-filter:batch       - Process up to 50 bounties"
+            echo "  deno task pre-filter:conservative - Conservative scoring (min 70%, max 25)"
+            echo ""
+            echo "  deno task evaluate               - 5-phase comprehensive evaluation"
+            echo "  deno task evaluate:priority      - Focus on priority orgs (tscircuit,zio,twentyhq)"
+            echo "  deno task evaluate:pre-filtered  - Only evaluate pre-filter score ≥80%"
+            echo "  deno task evaluate:single        - Evaluate just one bounty"
+            echo "  deno task evaluate:slash         - Use slash commands for evaluation"
+            echo ""
+            echo "  deno task pipeline               - Complete orchestrated pipeline"
+            echo "  deno task pipeline:auto-prep     - Auto-prep bounties with ≥80% success"
+            echo "  deno task pipeline:conservative  - Conservative pipeline (≥85% success, max 1 prep)"
+            echo "  deno task pipeline:full          - Full pipeline with auto-implementation"
+            echo ""
+            echo "  deno task implement              - TDD implementation workflow"
+            echo "  deno task submit                 - Professional submission workflow"
+            echo "  deno task submit:dry-run         - Test submission without creating PRs"
+            echo ""
+            echo "🗂️  Cache Management:"
+            echo "  deno task cache:stats            - View repository cache statistics"
+            echo "  deno task cache:cleanup          - Clean up old cache entries (>30 days)"
+            echo "  deno task cache:force-cleanup    - Force cleanup (>1 day, including active)"
+            echo ""
+            echo "⚡ Quick Workflows:"
+            echo "  deno task daily                  - Daily maintenance routine"
+            echo "  deno task daily:safe             - Safe daily with conservative settings"
+            echo "  deno task weekly                 - Weekly comprehensive analysis"
+            echo "  deno task smart-pipeline         - Intelligent pipeline with pre-filtering"
+            echo ""
+            echo "🧪 Testing & Validation:"
+            echo "  deno task test:validation        - Double-blind validation with real data"
+            echo "  deno task test:find-real-bounties - Find completed bounties for testing"
+            echo "  deno task test:validate-methodology - Validate evaluation methodology"
+            echo ""
+            echo "💬 Slash Commands (use in Claude Code):"
+            echo "  /bounty-pipe:evaluate            - Interactive bounty evaluation"
+            echo "  /bounty-pipe:prep                - 10-step preparation workflow"
+            echo "  /bounty-pipe:implement           - TDD implementation execution"
+            echo "  /bounty-pipe:submit              - Professional submission workflow"
+            echo "  /bounty-pipe:pipeline            - Complete end-to-end pipeline"
+            echo "  /bounty-pipe:workspace create <org>/<repo>#<issue> - Create development workspace"
+            echo "  /bounty-pipe:workspace list      - List active workspaces"
+            echo "  /bounty-pipe:workspace cleanup   - Clean up old workspaces"
+            echo ""
+            echo "📂 XDG Directory Structure:"
+            echo "  Cache:     ~/.cache/bounty-pipe/<org>/<repo>/"
+            echo "  Metadata:  ~/.cache/bounty-pipe/repo_metadata.json"
+            echo "  Evals:     ~/.cache/bounty-pipe/<org>/<org>-<repo>-<issue>.md"
+            echo "  Work:      ~/.local/share/bounty-pipe/work/<org>-<repo>-<issue>/"
+            echo ""
+            echo "📖 Documentation:"
+            echo "  workflows/CLAUDE-EVALUATE-BOUNTY.md  - 5-phase evaluation methodology"
+            echo "  workflows/CLAUDE-PREP-BOUNTY.md      - 10-step preparation workflow"
+            echo "  .claude/commands/bounty-pipe/         - Slash command documentation"
             echo ""
 
             # Ensure XDG directories exist
@@ -65,16 +116,20 @@
               echo "⚠️  GitHub CLI not authenticated. Run 'gh auth login' to authenticate."
               echo ""
             fi
+
+            echo "🔥 Ready to discover and evaluate bounties!"
+            echo ""
           '';
 
           # Environment variables
-          DENO_DIR = "$HOME/.cache/deno";
-          DENO_INSTALL_ROOT = "$HOME/.deno";
+          # These will be expanded at runtime when the shell is entered
+          DENO_DIR = "\${HOME}/.cache/deno";
+          DENO_INSTALL_ROOT = "\${HOME}/.deno";
 
           # XDG Base Directory Specification
-          XDG_CACHE_HOME = "$HOME/.cache";
-          XDG_DATA_HOME = "$HOME/.local/share";
-          XDG_CONFIG_HOME = "$HOME/.config";
+          XDG_CACHE_HOME = "\${HOME}/.cache";
+          XDG_DATA_HOME = "\${HOME}/.local/share";
+          XDG_CONFIG_HOME = "\${HOME}/.config";
         };
 
         # Package the application

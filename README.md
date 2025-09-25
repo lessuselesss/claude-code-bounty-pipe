@@ -5,73 +5,165 @@ A comprehensive automated bounty discovery, evaluation, and preparation system u
 ## 🏗️ System Architecture
 
 ```
-┌─────────────────────┐    ┌──────────────────────┐    ┌─────────────────────┐
-│   Bounty Index      │────│  Claude Code         │────│  Prep Workflow      │
-│   Generator         │    │  Evaluation Engine   │    │  Automation         │
-└─────────────────────┘    └──────────────────────┘    └─────────────────────┘
-         │                           │                            │
-         │                           │                            │
-    ┌────▼────┐                 ┌────▼────┐                  ┌────▼────┐
-    │ Algora  │                 │Enhanced │                  │ Ready   │
-    │  API    │                 │ Index   │                  │ Bounty  │
-    │         │                 │with eval│                  │ Repos   │
-    └─────────┘                 └─────────┘                  └─────────┘
+┌─────────────────────┐    ┌──────────────────────┐    ┌─────────────────────┐    ┌─────────────────────┐
+│   Bounty Index      │────│  Claude Code         │────│  Prep Workflow      │────│  Submission         │
+│   Generator         │    │  Evaluation Engine   │    │  Automation         │    │  Engine             │
+└─────────────────────┘    └──────────────────────┘    └─────────────────────┘    └─────────────────────┘
+         │                           │                            │                            │
+         │                           │                            │                            │
+    ┌────▼────┐                 ┌────▼────┐                  ┌────▼────┐                  ┌────▼────┐
+    │ Algora  │                 │Enhanced │                  │ Ready   │                  │GitHub   │
+    │  API    │                 │ Index   │                  │ Bounty  │                  │PRs with │
+    │         │                 │with eval│                  │ Repos   │                  │/claim   │
+    └─────────┘                 └─────────┘                  └─────────┘                  └─────────┘
 ```
 
 ## 📁 Project Structure
 
 ```
 /claude-code-bounty-pipe/
-├── src/
+├── src/                                # Core pipeline implementation
 │   ├── bounty-index-generator.ts        # Core index generation
+│   ├── pre-filter-engine.ts            # Lightweight screening engine
 │   ├── claude-evaluation-engine.ts      # Claude Code evaluation
-│   ├── prep-workflow-automation.ts      # Automated prep workflow
-│   └── pipeline-orchestrator.ts         # Main coordination logic
-├── frameworks/
+│   ├── repository-cache.ts             # XDG-compliant repository caching
+│   ├── implementation-engine.ts         # TDD implementation workflow
+│   ├── pipeline-orchestrator.ts         # Main coordination logic
+│   └── submission-workflow.ts           # Automated GitHub submission
+├── test/                               # Testing and validation
+│   ├── double-blind-validator.ts        # Dual-framework validation
+│   ├── validation-methodology.ts        # Unbiased testing system
+│   └── real-completed-bounty-finder.ts  # Real data collection
+├── workflows/                          # Proven methodologies
 │   ├── CLAUDE-EVALUATE-BOUNTY.md       # 5-phase evaluation methodology
 │   ├── CLAUDE-PREP-BOUNTY.md           # 10-step prep workflow
-│   └── CLAUDE-IMPLEMENTATION.md        # TDD implementation guide
-├── templates/
-│   ├── evaluation-report.md            # Evaluation output template
-│   ├── prep-checklist.md               # Prep validation template
-│   └── implementation-plan.md          # Implementation template
-├── config/
-│   ├── organizations.json              # Target organizations
-│   ├── evaluation-thresholds.json      # Decision criteria
-│   └── prep-templates.json             # Development templates
-├── output/
+│   ├── CLAUDE-SUBMIT-BOUNTY.md         # Professional submission workflow
+│   ├── CLAUDE-PRE-EVALUATION-FILTER.md # Rapid screening framework
+│   ├── EVALUATION-SCORING-MATRIX.md    # Formal scoring system
+│   └── PRE-FILTER-SCORING-MATRIX.md    # Lightweight scoring matrix
+├── .claude/commands/bounty-pipe/       # Slash command namespace
+│   ├── evaluate.md                     # /bounty-pipe:evaluate command
+│   ├── prep.md                         # /bounty-pipe:prep command
+│   ├── workspace.md                    # /bounty-pipe:workspace command
+│   └── pipeline.md                     # /bounty-pipe:pipeline command
+├── scripts/                            # Cache management utilities
+│   ├── cache-stats.ts                  # Repository cache statistics
+│   └── cache-cleanup.ts                # Cache cleanup automation
+├── output/                             # Generated data and results
 │   ├── indices/                        # Generated bounty indices
-│   ├── evaluations/                    # Individual evaluations
-│   ├── reports/                        # Analysis reports
-│   └── prep/                           # Prepared bounty repos
-└── docs/
+│   ├── validation/                     # Test results and validation data
+│   ├── test/                          # Test datasets
+│   └── reports/                       # Analysis reports
+└── docs/                              # Documentation
     ├── USAGE.md                        # Usage guide
     ├── CONFIGURATION.md                # Configuration options
     └── EXAMPLES.md                     # Real-world examples
 ```
 
+## 🗂️ XDG-Compliant Data Structure
+
+The system follows XDG Base Directory specification for proper Linux integration:
+
+```
+# Repository Cache (shared, read-only)
+~/.cache/bounty-pipe/
+├── repo_metadata.json                 # Repository usage tracking
+├── tscircuit/                          # Organization-based structure
+│   ├── core/                          # Cached repository
+│   ├── schematic-viewer/              # Cached repository
+│   ├── tscircuit-core-1264.md         # Evaluation files in org directories
+│   └── tscircuit-schematic-123.md     # More evaluation reports
+└── activepieces/
+    ├── activepieces/                  # Cached repository
+    └── activepieces-activepieces-456.md # Evaluation files
+
+# Development Workspaces (isolated, modifiable)
+~/.local/share/bounty-pipe/work/
+├── tscircuit-core-1264/               # Individual bounty workspace
+│   ├── .git/                         # Full git repository
+│   ├── src/                          # Source code (modifiable)
+│   └── [all project files]           # Ready for development
+├── activepieces-activepieces-456/     # Another bounty workspace
+└── twentyhq-twenty-789/               # More workspaces
+```
+
 ## 🚀 Quick Start
 
 ### Installation
+
+#### Option 1: Nix Flake (Recommended)
 ```bash
 # Clone the repository
 git clone https://github.com/your-username/claude-code-bounty-pipe
 cd claude-code-bounty-pipe
 
-# Install dependencies
+# Enter Nix development environment
+nix develop
+
+# Or use direnv for automatic environment loading
+echo "use flake" > .envrc
+direnv allow
+```
+
+#### Option 2: Manual Deno Installation
+```bash
+# Install Deno (if not using Nix)
+curl -fsSL https://deno.land/install.sh | sh
+
+# Clone and setup
+git clone https://github.com/your-username/claude-code-bounty-pipe
+cd claude-code-bounty-pipe
 deno cache src/*.ts
 ```
+
+#### Prerequisites
+- **GitHub CLI**: Authentication required for repository operations
+  ```bash
+  gh auth login  # Required for GitHub API access
+  ```
+- **XDG Directories**: Automatically created for cache and workspace management
 
 ### Basic Usage
 ```bash
 # 1. Generate bounty index
-deno run --allow-all src/bounty-index-generator.ts
+deno task generate
 
 # 2. Evaluate bounties with Claude Code
-deno run --allow-all src/claude-evaluation-engine.ts --max-evaluations=5
+deno task evaluate --max-evaluations=5
 
 # 3. Auto-prep high-confidence bounties
-deno run --allow-all src/pipeline-orchestrator.ts --auto-prep --min-success=80
+deno task pipeline:auto-prep --min-success=80
+
+# 4. Submit ready bounties using GitHub CLI
+deno task submit --max-submissions=2
+
+# 5. Manage repository cache
+deno task cache:stats     # View cache statistics
+deno task cache:cleanup   # Clean up old cache entries
+```
+
+### Slash Command Usage
+```bash
+# Interactive bounty management (from Claude Code)
+/bounty-pipe:evaluate     # Evaluate specific bounty
+/bounty-pipe:prep         # Prepare development environment
+/bounty-pipe:workspace create tscircuit/core#1264  # Create workspace
+/bounty-pipe:pipeline     # Full pipeline execution
+```
+
+### Nix Flake Commands
+```bash
+# Direct execution via Nix flake
+nix run .#generate        # Generate bounty index
+nix run .#evaluate        # Evaluate bounties
+nix run .#pipeline        # Run pipeline
+
+# Install as system package
+nix profile install .     # Installs bounty-pipe-* commands globally
+
+# Development environment
+nix develop              # Enter development shell
+nix flake check          # Validate flake configuration
 ```
 
 ## 🎯 Core Features
@@ -81,17 +173,33 @@ deno run --allow-all src/pipeline-orchestrator.ts --auto-prep --min-success=80
 - **Deduplication**: Prevents duplicate bounties across updates
 - **Metadata Enhancement**: Rich bounty data with attempt counts and status
 
-### 🧠 Claude Code Evaluation
+### 🧠 Hybrid Evaluation System
 - **5-Phase Methodology**: Systematic evaluation using proven framework
+- **Claude Code SDK**: High-performance automated evaluation at scale
+- **Interactive Slash Commands**: Manual evaluation and workspace management
 - **GitHub Research**: Automated repository and issue analysis
 - **Risk Assessment**: Comprehensive red flag detection
 - **Decision Matrix**: Data-driven go/no-go recommendations
+
+### 🗂️ XDG-Compliant Repository Management
+- **Intelligent Caching**: Repositories cached at `~/.cache/bounty-pipe/<org>/<repo>/`
+- **Workspace Isolation**: Individual development environments at `~/.local/share/bounty-pipe/work/`
+- **Evaluation Organization**: Assessment files grouped by organization
+- **Cache Management**: Automatic cleanup and usage tracking
+- **Multi-Session Persistence**: Work survives reboots and session changes
 
 ### 🛠️ Automated Preparation
 - **Environment Setup**: Reproducible development environments
 - **Test Validation**: Ensures TDD approach viability
 - **Documentation Generation**: Implementation plans and strategies
 - **Clean Separation**: Development files don't pollute target repos
+
+### 📦 Nix Flake Integration
+- **Reproducible Environment**: Exact dependency versions across systems
+- **Zero-Config Setup**: All tools and dependencies included
+- **Direnv Support**: Automatic environment activation
+- **Packaged Apps**: Install globally or run directly via flake
+- **XDG Compliance**: Proper directory structure setup
 
 ## 📊 Pipeline Workflow
 
@@ -208,18 +316,17 @@ deno run --allow-all src/claude-evaluation-engine.ts \
   risk_level: 'low',
   estimated_timeline: '2-3 days',
   red_flags: [],
-  evaluation_file: './output/evaluations/tscircuit-core-1391.md'
+  evaluation_file: '~/.cache/bounty-pipe/tscircuit/tscircuit-core-1391.md'
 }
 ```
 
-### Prep Status
+### Workspace Creation
 ```typescript
 {
-  prep_status: 'completed',
-  prep_file: './output/prep/tscircuit-core-1391-prep.md',
-  environment_validated: true,
-  test_suite_passing: true,
-  implementation_plan_ready: true
+  workspace_path: '~/.local/share/bounty-pipe/work/tscircuit-core-1391/',
+  branch: 'feat/issue-1391',
+  repository_cache: '~/.cache/bounty-pipe/tscircuit/core/',
+  status: 'ready_for_development'
 }
 ```
 
@@ -269,7 +376,7 @@ This system is designed to be extended and customized:
 - **[Usage Guide](docs/USAGE.md)**: Comprehensive usage instructions
 - **[Configuration](docs/CONFIGURATION.md)**: All configuration options
 - **[Examples](docs/EXAMPLES.md)**: Real-world success stories
-- **[Frameworks](frameworks/)**: Complete evaluation and prep methodologies
+- **[Workflows](workflows/)**: Complete evaluation and prep methodologies
 
 ---
 

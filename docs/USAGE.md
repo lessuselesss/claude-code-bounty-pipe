@@ -306,8 +306,8 @@ deno task generate:quick
 **Missing evaluation framework**:
 ```bash
 # Check framework files exist
-ls -la frameworks/CLAUDE-EVALUATE-BOUNTY.md
-ls -la frameworks/CLAUDE-PREP-BOUNTY.md
+ls -la workflows/CLAUDE-EVALUATE-BOUNTY.md
+ls -la workflows/CLAUDE-PREP-BOUNTY.md
 ```
 
 ### Debug Mode

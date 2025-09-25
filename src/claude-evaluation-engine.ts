@@ -7,91 +7,21 @@
  * Claude Code instances for comprehensive evaluation.
  */
 
-import { claude } from 'npm:@instantlyeasy/claude-code-sdk-ts@^0.3.0';
+import { join } from "https://deno.land/std@0.208.0/path/mod.ts";
+import { query } from 'npm:@anthropic-ai/claude-code@latest';
+import { evaluateBountyStructured } from './slash-command-executor.ts';
+import { getBountyPipePaths } from './repository-cache.ts';
+import {
+  loadEvaluationFramework,
+  extractRepoInfo,
+  buildEvaluationPrompt,
+  parseEvaluationResult,
+  getCachedRepository
+} from './evaluation-framework.ts';
+import { checkComprehensiveAssignment } from './algora-api-client.ts';
+import type { Bounty, BountyIndex, OrganizationBounties } from '../schemas/bounty-schema.ts';
 
-interface Bounty {
-  id: string;
-  status: string;
-  type: string;
-  kind: string;
-  reward: {
-    currency: string;
-    amount: number;
-  };
-  reward_formatted: string;
-  task: {
-    id: string;
-    title: string;
-    body: string;
-    url: string;
-    number: number;
-    repo_name: string;
-    repo_owner: string;
-  };
-  org: {
-    handle: string;
-    name: string;
-    github_handle: string;
-  };
-  created_at: string;
-  updated_at: string;
-  attempt_count?: number;
-  internal?: {
-    evaluation_status: 'not_evaluated' | 'in_progress' | 'evaluated' | 'evaluation_failed';
-    go_no_go: 'go' | 'no-go' | 'caution' | 'pending';
-    complexity_score?: number;
-    success_probability?: number;
-    risk_level: 'low' | 'medium' | 'high' | 'unknown';
-    evaluation_file?: string;
-    last_evaluated?: string;
-    red_flags?: string[];
-    estimated_timeline?: string;
-    notes?: string;
-    claude_code_evaluated?: boolean;
-    prep_status?: 'not_prepped' | 'in_progress' | 'completed' | 'failed';
-    prep_file?: string;
-    environment_validated?: boolean;
-    test_suite_passing?: boolean;
-  };
-}
-
-interface OrganizationBounties {
-  organization: string;
-  bounties: Bounty[];
-  total_bounties: number;
-  total_amount: number;
-  last_updated: string;
-  error?: string;
-}
-
-interface BountyIndex {
-  generated_at: string;
-  last_full_scan?: string;
-  update_mode: 'full' | 'incremental';
-  total_organizations: number;
-  total_bounties: number;
-  total_amount: number;
-  organizations: OrganizationBounties[];
-  summary: {
-    organizations_with_bounties: number;
-    organizations_with_errors: number;
-    evaluated_bounties: number;
-    go_recommendations: number;
-    no_go_recommendations: number;
-    caution_recommendations: number;
-    prepped_bounties: number;
-    largest_bounty: {
-      amount: number;
-      organization: string;
-      title: string;
-      url: string;
-    } | null;
-    most_active_organization: {
-      name: string;
-      bounty_count: number;
-    } | null;
-  };
-}
+// Using formal schema from schemas/bounty-schema.ts with comprehensive assignment detection
 
 /**
  * Load the latest bounty index
@@ -119,29 +49,6 @@ async function loadLatestIndex(): Promise<BountyIndex | null> {
   }
 }
 
-/**
- * Load the evaluation framework
- */
-async function loadEvaluationFramework(): Promise<string> {
-  try {
-    const framework = await Deno.readTextFile('../frameworks/CLAUDE-EVALUATE-BOUNTY.md');
-    return framework;
-  } catch (error) {
-    console.error(`❌ Failed to load evaluation framework: ${error.message}`);
-    throw new Error('Could not load CLAUDE-EVALUATE-BOUNTY.md framework');
-  }
-}
-
-/**
- * Extract GitHub org and repo from bounty task URL
- */
-function extractRepoInfo(url: string): { org: string; repo: string } | null {
-  const match = url.match(/github\.com\/([^\/]+)\/([^\/]+)\/issues\/\d+/);
-  if (match) {
-    return { org: match[1], repo: match[2] };
-  }
-  return null;
-}
 
 /**
  * Check if a bounty should be evaluated automatically
@@ -155,6 +62,22 @@ function shouldEvaluateBounty(bounty: Bounty, options: {
 
   // Skip if below minimum amount
   if (bounty.reward.amount < minAmount) {
+    return false;
+  }
+
+  // Skip if bounty is not available (assigned on GitHub or claimed on Algora)
+  if (bounty.internal?.is_available === false) {
+    const githubAssigned = bounty.internal.github_assignment?.assignees?.length > 0;
+    const algoraClaimed = bounty.internal.algora_assignment?.claimed;
+
+    if (githubAssigned) {
+      const assignees = bounty.internal.github_assignment.assignees.map(a => a.login).join(', ');
+      console.log(`⏭️  Skipping bounty ${bounty.id} - assigned on GitHub to: ${assignees}`);
+    } else if (algoraClaimed) {
+      console.log(`⏭️  Skipping bounty ${bounty.id} - claimed on Algora by ${bounty.internal.algora_assignment.claimant || 'unknown'}`);
+    } else {
+      console.log(`⏭️  Skipping bounty ${bounty.id} - marked as unavailable`);
+    }
     return false;
   }
 
@@ -261,15 +184,92 @@ function extractRedFlags(text: string): string[] {
   return redFlags.slice(0, 5); // Limit to top 5 red flags
 }
 
+
 /**
- * Ensure evaluations directory exists
+ * Evaluate a bounty using native slash command
  */
-async function ensureEvaluationDirectory(): Promise<void> {
-  try {
-    await Deno.mkdir('../output/evaluations', { recursive: true });
-  } catch {
-    // Directory already exists
+async function evaluateBountyWithSlashCommand(bounty: Bounty): Promise<Bounty> {
+  const repoInfo = extractRepoInfo(bounty.task.url);
+  if (!repoInfo) {
+    console.log(`  ❌ Could not extract repo info from URL: ${bounty.task.url}`);
+    bounty.internal = {
+      ...bounty.internal,
+      evaluation_status: 'evaluation_failed',
+      go_no_go: 'pending',
+      risk_level: 'unknown',
+      claude_code_evaluated: false,
+      notes: 'Could not extract repository information from URL'
+    };
+    return bounty;
   }
+
+  try {
+    console.log(`  ⚡ Slash command evaluating: ${repoInfo.org}/${repoInfo.repo}#${bounty.task.number}`);
+
+    // Mark as in progress
+    bounty.internal = {
+      ...bounty.internal,
+      evaluation_status: 'in_progress',
+      go_no_go: 'pending',
+      risk_level: 'unknown',
+      claude_code_evaluated: false
+    };
+
+    // Execute slash command evaluation
+    const result = await evaluateBountyStructured(
+      repoInfo.org,
+      repoInfo.repo,
+      bounty.task.number,
+      {
+        minReward: bounty.reward.amount / 100, // Convert cents to dollars
+        timeout: 300000 // 5 minutes
+      }
+    );
+
+    if (!result.success) {
+      throw new Error(result.error || 'Slash command evaluation failed');
+    }
+
+    // Parse the evaluation result
+    const structuredResult = result.evaluation || parseEvaluationResult(result.fullOutput, repoInfo, bounty);
+
+    // Generate markdown file with the full evaluation in XDG-compliant location
+    const { repoCache } = getBountyPipePaths();
+    const orgDir = join(repoCache, repoInfo.org);
+    await Deno.mkdir(orgDir, { recursive: true });
+    const evaluationFile = join(orgDir, `${repoInfo.org}-${repoInfo.repo}-${bounty.task.number}.md`);
+    await Deno.writeTextFile(evaluationFile, result.fullOutput);
+
+    // Update internal fields with evaluation results
+    bounty.internal = {
+      evaluation_status: 'evaluated',
+      go_no_go: structuredResult.go_no_go,
+      complexity_score: structuredResult.complexity_score,
+      success_probability: structuredResult.success_probability,
+      risk_level: structuredResult.risk_level,
+      evaluation_file: evaluationFile,
+      last_evaluated: new Date().toISOString(),
+      red_flags: structuredResult.red_flags,
+      estimated_timeline: structuredResult.estimated_timeline,
+      notes: structuredResult.notes,
+      claude_code_evaluated: true
+    };
+
+    console.log(`    ✅ Slash command evaluation complete: ${structuredResult.go_no_go.toUpperCase()} (${structuredResult.success_probability}% success)`);
+
+  } catch (error) {
+    console.log(`    ❌ Slash command evaluation failed: ${error.message}`);
+    bounty.internal = {
+      ...bounty.internal,
+      evaluation_status: 'evaluation_failed',
+      go_no_go: 'pending',
+      risk_level: 'unknown',
+      claude_code_evaluated: false,
+      notes: `Slash command evaluation failed: ${error.message}`
+    };
+  }
+
+  return bounty;
 }
 
 /**
@@ -302,52 +302,64 @@ async function evaluateBountyWithClaudeCode(bounty: Bounty, framework: string): 
       claude_code_evaluated: false
     };
 
-    // Prepare the evaluation prompt with bounty context
-    const evaluationPrompt = `
-Using the 5-phase bounty evaluation framework provided, please evaluate this bounty:
+    // Get cached repository for evaluation (preserves across sessions)
+    console.log(`    📁 Getting cached repository for evaluation...`);
+    const cachedRepoPath = await getCachedRepository(repoInfo.org, repoInfo.repo, {
+      maxAgeHours: 168, // 1 week cache for evaluations
+      forEvaluation: true
+    });
 
-**Bounty Details:**
-- Organization: ${repoInfo.org}
-- Repository: ${repoInfo.repo}
-- Issue Number: ${bounty.task.number}
-- Amount: ${bounty.reward_formatted} ($${bounty.reward.amount/100})
-- Title: ${bounty.task.title}
-- URL: ${bounty.task.url}
-- Description: ${bounty.task.body}
+    // Prepare the evaluation prompt with bounty context and repo cache info
+    const evaluationPrompt = buildEvaluationPrompt(bounty) + `
 
-**Instructions:**
-1. Follow the complete 5-phase evaluation methodology from the framework
-2. Use GitHub CLI research methods as specified in the framework
-3. Generate a systematic evaluation with scoring and risk assessment
-4. Create a structured markdown report
-5. Provide a final JSON summary with the key evaluation metrics
-
-Please execute the full evaluation following all phases and provide both:
-1. A detailed markdown evaluation report
-2. A JSON summary with: go_no_go, complexity_score, success_probability, risk_level, red_flags, estimated_timeline, decision_rationale
-
-Focus on identifying "trap bounties" and providing accurate complexity assessment.
+**Repository Cache Information:**
+- Cached repository available at: ${cachedRepoPath}
+- Use this path for any file analysis or repository exploration
+- Repository is kept fresh and reused across evaluations for efficiency
 `;
 
     // Execute Claude Code evaluation with the framework as context
-    const evaluationResult = await claude()
-      .withModel('sonnet')
-      .allowTools('Read', 'Grep', 'Glob', 'Bash', 'WebFetch')
-      .inDirectory('.') // Use current directory context
-      .withTimeout(300000) // 5 minute timeout for thorough evaluation
-      .debug(false) // Disable debug to reduce noise
-      .onToolUse(tool => console.log(`    🔧 Using tool: ${tool.name}`))
-      .query(`${framework}\n\n---\n\n${evaluationPrompt}`)
-      .asText();
+    let evaluationResult = '';
+    for await (const message of query({
+      prompt: `${framework}\n\n---\n\n${evaluationPrompt}`,
+      options: {
+        model: 'claude-3-5-sonnet-20241022',
+        allowedTools: ['Read', 'Grep', 'Glob', 'Bash', 'WebFetch'],
+        cwd: cachedRepoPath,
+        maxTurns: 10,
+        hooks: {
+          PreToolUse: [{
+            hooks: [async (input) => {
+              console.log(`    🔧 Using tool: ${input.tool_name}`);
+              return { continue: true };
+            }]
+          }]
+        }
+      }
+    })) {
+      if (message.type === 'assistant') {
+        evaluationResult += message.message.content
+          .filter(block => block.type === 'text')
+          .map(block => block.text)
+          .join('\n');
+      } else if (message.type === 'result') {
+        if (message.subtype === 'success') {
+          evaluationResult = message.result;
+        }
+        break;
+      }
+    }
 
     console.log(`    📝 Evaluation completed, parsing results...`);
 
     // Parse the evaluation result to extract structured data
     const structuredResult = parseEvaluationResult(evaluationResult, repoInfo, bounty);
 
-    // Generate markdown file with the full evaluation
-    const evaluationFile = `../output/evaluations/${repoInfo.org}-${repoInfo.repo}-${bounty.task.number}.md`;
-    await ensureEvaluationDirectory();
+    // Generate markdown file with the full evaluation in XDG-compliant location
+    const { repoCache } = getBountyPipePaths();
+    const orgDir = join(repoCache, repoInfo.org);
+    await Deno.mkdir(orgDir, { recursive: true });
+    const evaluationFile = join(orgDir, `${repoInfo.org}-${repoInfo.repo}-${bounty.task.number}.md`);
     await Deno.writeTextFile(evaluationFile, evaluationResult);
 
     // Update internal fields with Claude Code evaluation results
@@ -393,6 +405,7 @@ async function autoEvaluateWithClaudeCode(
     maxAttempts?: number;
     skipExisting?: boolean;
     organizations?: string[];
+    evaluationMethod?: 'sdk' | 'slash-command';
   } = {}
 ): Promise<BountyIndex> {
 
@@ -401,19 +414,22 @@ async function autoEvaluateWithClaudeCode(
     minAmount = 5000, // $50 minimum
     maxAttempts = 0, // Only evaluate bounties with 0 attempts
     skipExisting = true,
-    organizations = []
+    organizations = [],
+    evaluationMethod = 'sdk' // Default to SDK for performance
   } = options;
 
-  console.log(`🤖 Claude Code auto-evaluation (max: ${maxEvaluations}, min: $${minAmount/100}, max attempts: ${maxAttempts})`);
+  console.log(`🤖 Claude Code auto-evaluation (method: ${evaluationMethod}, max: ${maxEvaluations}, min: $${minAmount/100}, max attempts: ${maxAttempts})`);
 
-  // Load the evaluation framework
-  let framework: string;
-  try {
-    framework = await loadEvaluationFramework();
-    console.log(`📋 Loaded evaluation framework (${framework.length} characters)`);
-  } catch (error) {
-    console.error(`❌ Cannot proceed without evaluation framework: ${error.message}`);
-    return index;
+  // Load the evaluation framework (only needed for SDK method)
+  let framework: string | undefined;
+  if (evaluationMethod === 'sdk') {
+    try {
+      framework = await loadEvaluationFramework();
+      console.log(`📋 Loaded evaluation framework (${framework.length} characters)`);
+    } catch (error) {
+      console.error(`❌ Cannot proceed without evaluation framework: ${error.message}`);
+      return index;
+    }
   }
 
   let evaluationsPerformed = 0;
@@ -434,8 +450,12 @@ async function autoEvaluateWithClaudeCode(
         totalCandidates++;
         console.log(`  📊 Candidate: ${bounty.task.title} ($${bounty.reward.amount/100}, ${bounty.attempt_count || 0} attempts)`);
 
-        // Evaluate the bounty with Claude Code
-        orgData.bounties[i] = await evaluateBountyWithClaudeCode(bounty, framework);
+        // Evaluate the bounty with selected method
+        if (evaluationMethod === 'slash-command') {
+          orgData.bounties[i] = await evaluateBountyWithSlashCommand(bounty);
+        } else {
+          orgData.bounties[i] = await evaluateBountyWithClaudeCode(bounty, framework!);
+        }
         evaluationsPerformed++;
 
         // Add delay between evaluations to be nice to APIs and prevent overwhelming Claude Code
@@ -468,6 +488,7 @@ function generateEnhancedSummary(organizations: OrganizationBounties[]): BountyI
   let noGoCount = 0;
   let cautionCount = 0;
   let preppedCount = 0;
+  let submittedCount = 0;
 
   // Analyze all bounties
   for (const org of organizations) {
@@ -501,6 +522,12 @@ function generateEnhancedSummary(organizations: OrganizationBounties[]): BountyI
       // Count prep status
       if (bounty.internal?.prep_status === 'completed') {
         preppedCount++;
+      }
+
+      // Count submission status
+      if (bounty.internal?.submission_status &&
+          ['attempt_declared', 'implementing', 'pr_submitted', 'pr_approved', 'bounty_claimed'].includes(bounty.internal.submission_status)) {
+        submittedCount++;
       }
     }
   }
@@ -537,6 +564,7 @@ async function main() {
   const maxAttempts = parseInt(args.find(arg => arg.startsWith('--max-attempts='))?.split('=')[1] || '0');
   const skipExisting = !args.includes('--reevaluate');
   const organizations = args.find(arg => arg.startsWith('--orgs='))?.split('=')[1]?.split(',') || [];
+  const evaluationMethod = args.includes('--slash-command') ? 'slash-command' : 'sdk';
 
   console.log("🤖 Claude Code Evaluation Engine");
   console.log("=".repeat(50));
@@ -558,7 +586,8 @@ async function main() {
     minAmount,
     maxAttempts,
     skipExisting,
-    organizations
+    organizations,
+    evaluationMethod
   });
 
   // Save updated index
