@@ -1,0 +1,30 @@
+{
+  "tasks": {
+    "generate": "deno run --allow-all src/bounty-index-generator.ts",
+    "generate:full": "deno run --allow-all src/bounty-index-generator.ts --full-scan",
+    "generate:quick": "deno run --allow-all src/bounty-index-generator.ts --max-age=6",
+    "evaluate": "deno run --allow-all src/claude-evaluation-engine.ts",
+    "evaluate:priority": "deno run --allow-all src/claude-evaluation-engine.ts --orgs=tscircuit,zio,twentyhq --max-evaluations=5",
+    "pipeline": "deno run --allow-all src/pipeline-orchestrator.ts",
+    "pipeline:auto-prep": "deno run --allow-all src/pipeline-orchestrator.ts --auto-prep --min-success=80",
+    "pipeline:conservative": "deno run --allow-all src/pipeline-orchestrator.ts --auto-prep --min-success=85 --max-prep=1",
+    "daily": "deno run --allow-all src/bounty-index-generator.ts --max-age=24 && deno run --allow-all src/pipeline-orchestrator.ts --auto-prep --max-evaluations=3",
+    "weekly": "deno run --allow-all src/pipeline-orchestrator.ts --auto-prep --max-evaluations=10 --min-success=75 --reports"
+  },
+  "imports": {
+    "@std/": "https://deno.land/std@0.208.0/"
+  },
+  "lint": {
+    "rules": {
+      "tags": ["recommended"]
+    }
+  },
+  "fmt": {
+    "useTabs": false,
+    "lineWidth": 100,
+    "indentWidth": 2,
+    "semiColons": true,
+    "singleQuote": true,
+    "proseWrap": "preserve"
+  }
+}
