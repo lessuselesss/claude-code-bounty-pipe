@@ -9,6 +9,7 @@
 
 import type { Bounty, BountyIndex, OrganizationBounties } from '../schemas/bounty-schema.ts';
 import { fetchLatestScraperData, loadScraperData } from './bounty-scraper-adapter.ts';
+import { fixBountyIndexTitles } from './title-fixer.ts';
 
 /**
  * REMOVED: Organization lists and loading logic - now using bounty-crawl scraper data exclusively
@@ -192,6 +193,13 @@ async function main() {
       scraperFile,
       skipAssignmentCheck
     });
+
+    // Fix generic "Bounty X" titles with real GitHub issue titles
+    console.log('\n🔧 Post-processing: Fixing generic bounty titles...');
+    const titleStats = await fixBountyIndexTitles(index);
+    if (titleStats.fixedCount > 0) {
+      console.log(`✅ Enhanced ${titleStats.fixedCount} bounty titles with real GitHub issue titles`);
+    }
 
     const filename = await saveBountyIndex(index);
 
